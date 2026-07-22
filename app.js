@@ -6,6 +6,8 @@ import morgan from "morgan";
 import compression from "compression";
 import mongoSanitize from "express-mongo-sanitize";
 import routes from "./routes/index.js";
+import logger from "./utils/logger.js";
+import errorHandler from "./middleware/error.middleware.js";
 
 const app = express();
 
@@ -28,8 +30,12 @@ const apiLimiter = rateLimit({
 });
 app.use(apiLimiter);
 
-// Logging (Morgan) - Use 'combined' for production, 'dev' for development
-app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+// Logging (Morgan redirected through Winston)
+app.use(
+  morgan(process.env.NODE_ENV === "production" ? "combined" : "dev", {
+    stream: { write: (message) => logger.http(message.trim()) },
+  })
+);
 
 // Middleware
 // Restrict CORS to a specific origin in production
@@ -68,14 +74,6 @@ app.use(/./, (req, res) => {
 });
 
 // Global Error Handler
-app.use((err, req, res, next) => {
-  console.error(err.stack); // You can replace this with a logger like Winston later
-
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || "Internal Server Error",
-    ...(process.env.NODE_ENV !== "production" && { stack: err.stack }), // Hide stack trace in production
-  });
-});
+app.use(errorHandler);
 
 export default app;

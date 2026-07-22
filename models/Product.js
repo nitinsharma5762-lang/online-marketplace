@@ -10,13 +10,13 @@ const productSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // Seller/User UUID
+    // Seller/User UUID (from user model)
     userId: {
       type: String,
       required: true,
     },
 
-    // Product Name
+    // Product Name (e.g., "Tata Salt", "Fresh Tomatoes")
     name: {
       type: String,
       required: true,
@@ -29,16 +29,25 @@ const productSchema = new mongoose.Schema(
       default: "",
     },
 
-    // Product Category
+    // Product Category reference
     categoryId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
       required: true,
     },
 
-    // Brand
+    // Optional Sub-category reference
+    subCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+    },
+
+    // Brand name (e.g., "Amul", "Organic India")
     brand: {
       type: String,
       default: "",
+      trim: true,
     },
 
     // Selling Price
@@ -48,18 +57,70 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
-    // Original Price (Optional)
+    // Original Price / MRP
     originalPrice: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
-    // Available Stock
+    // Discount percentage (auto-calculated or set manually)
+    discountPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+
+    // Offer details/tags (e.g., "Buy 1 Get 1 Free", "Flat 10% Off")
+    offerTag: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // Offer expiration date
+    offerExpiresAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Stock Quantity
     stock: {
       type: Number,
       default: 0,
       min: 0,
     },
+
+    // Measurement Units (kg, g, piece, l, ml, pack, etc.)
+    unit: {
+      type: String,
+      enum: ["kg", "g", "piece", "l", "ml", "pack", "item"],
+      required: true,
+    },
+
+    // Numerical value of the unit (e.g., 500 for "500 g", 1 for "1 kg")
+    unitValue: {
+      type: Number,
+      required: true,
+      min: 0.001,
+    },
+
+    // Display string for the unit (e.g., "500 g", "1 kg")
+    unitText: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // Seasonal relevance (e.g., "summer" for mangoes, "winter" for carrots/festive)
+    seasons: [
+      {
+        type: String,
+        enum: ["summer", "monsoon", "winter", "spring", "festive", "all-season"],
+        default: "all-season",
+      },
+    ],
 
     // Product Images
     images: [
@@ -95,7 +156,7 @@ const productSchema = new mongoose.Schema(
       default: false,
     },
 
-    // Product Active
+    // Product Active Status
     isActive: {
       type: Boolean,
       default: true,
@@ -118,10 +179,41 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    // Nutrition facts / Key ingredients (useful for Blinkit/Zepto/Instamart food products)
+    highlights: {
+      type: Map,
+      of: String,
+      default: {},
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Pre-save hook to generate unitText and calculate discount percentage
+productSchema.pre("save", function () {
+  // Format unitText (e.g. "500 g" or "1 kg") if not explicitly set
+  if (this.unit && this.unitValue && !this.unitText) {
+    this.unitText = `${this.unitValue} ${this.unit}`;
+  }
+
+  // Calculate discount percentage automatically if originalPrice is valid
+  if (this.originalPrice && this.originalPrice > this.price) {
+    this.discountPercentage = Math.round(
+      ((this.originalPrice - this.price) / this.originalPrice) * 100
+    );
+  } else {
+    this.discountPercentage = 0;
+  }
+
+  // Update availability based on stock
+  if (this.stock === 0) {
+    this.availability = "out_of_stock";
+  } else {
+    this.availability = "in_stock";
+  }
+});
 
 export default mongoose.model("Product", productSchema);
